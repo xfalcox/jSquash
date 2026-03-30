@@ -1,1 +1,2 @@
-export { default as decode } from './decode.js';
+export { default as decode, decodeAnimated, isAnimated } from './decode.js';
+export type { GIFFrame } from './decode.js';

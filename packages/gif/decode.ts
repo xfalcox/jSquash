@@ -1,7 +1,9 @@
-import type { GIFModule } from './codec/dec/gif_dec.js';
+import type { GIFModule, GIFFrame } from './codec/dec/gif_dec.js';
 import { initEmscriptenModule } from './utils.js';
 
 import gif_dec from './codec/dec/gif_dec.js';
+
+export type { GIFFrame };
 
 let emscriptenModule: Promise<GIFModule>;
 
@@ -40,4 +42,28 @@ export default async function decode(
   const result = module.decode(buffer);
   if (!result) throw new Error('Decoding error');
   return result;
+}
+
+export async function decodeAnimated(
+  buffer: ArrayBuffer,
+): Promise<GIFFrame[]> {
+  if (!emscriptenModule) {
+    init();
+  }
+
+  const module = await emscriptenModule;
+  const result = module.decodeAnimated(buffer);
+  if (!result) throw new Error('Decoding error');
+  return result;
+}
+
+export async function isAnimated(
+  buffer: ArrayBuffer,
+): Promise<boolean> {
+  if (!emscriptenModule) {
+    init();
+  }
+
+  const module = await emscriptenModule;
+  return module.isAnimated(buffer);
 }
