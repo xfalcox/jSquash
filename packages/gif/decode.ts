@@ -5,6 +5,16 @@ import gif_dec from './codec/dec/gif_dec.js';
 
 export type { GIFFrame };
 
+function validateGif(buffer: ArrayBuffer): void {
+  const header = new Uint8Array(buffer, 0, 6);
+  const sig = String.fromCharCode(...header);
+  if (sig !== 'GIF87a' && sig !== 'GIF89a') {
+    throw new Error(
+      `Not a valid GIF file (expected GIF87a/GIF89a header, got "${sig.replace(/[^\x20-\x7E]/g, '?')}")`,
+    );
+  }
+}
+
 let emscriptenModule: Promise<GIFModule>;
 
 export async function init(
@@ -34,6 +44,7 @@ export async function init(
 export default async function decode(
   buffer: ArrayBuffer,
 ): Promise<ImageData> {
+  validateGif(buffer);
   if (!emscriptenModule) {
     init();
   }
@@ -47,6 +58,7 @@ export default async function decode(
 export async function decodeAnimated(
   buffer: ArrayBuffer,
 ): Promise<GIFFrame[]> {
+  validateGif(buffer);
   if (!emscriptenModule) {
     init();
   }
@@ -60,6 +72,7 @@ export async function decodeAnimated(
 export async function isAnimated(
   buffer: ArrayBuffer,
 ): Promise<boolean> {
+  validateGif(buffer);
   if (!emscriptenModule) {
     init();
   }
