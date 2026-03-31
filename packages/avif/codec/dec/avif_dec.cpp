@@ -8,6 +8,7 @@ thread_local const val Uint8ClampedArray = val::global("Uint8ClampedArray");
 thread_local const val Uint16Array = val::global("Uint16Array");
 thread_local const val ImageData = val::global("ImageData");
 thread_local const val Object = val::global("Object");
+thread_local const val Array = val::global("Array");
 
 val decode(std::string avifimage, uint32_t bitDepth = 8) {
   avifImage* image = avifImageCreateEmpty();
@@ -57,6 +58,71 @@ val decode(std::string avifimage, uint32_t bitDepth = 8) {
   return result;
 }
 
+bool isAnimated(std::string avifimage) {
+  avifDecoder* decoder = avifDecoderCreate();
+  avifResult setIOResult = avifDecoderSetIOMemory(
+      decoder, (const uint8_t*)avifimage.c_str(), avifimage.length());
+  if (setIOResult != AVIF_RESULT_OK) {
+    avifDecoderDestroy(decoder);
+    return false;
+  }
+
+  avifResult parseResult = avifDecoderParse(decoder);
+  if (parseResult != AVIF_RESULT_OK) {
+    avifDecoderDestroy(decoder);
+    return false;
+  }
+
+  bool result = decoder->imageCount > 1;
+  avifDecoderDestroy(decoder);
+  return result;
+}
+
+val decodeAnimated(std::string avifimage) {
+  avifDecoder* decoder = avifDecoderCreate();
+  avifResult setIOResult = avifDecoderSetIOMemory(
+      decoder, (const uint8_t*)avifimage.c_str(), avifimage.length());
+  if (setIOResult != AVIF_RESULT_OK) {
+    avifDecoderDestroy(decoder);
+    return val::null();
+  }
+
+  avifResult parseResult = avifDecoderParse(decoder);
+  if (parseResult != AVIF_RESULT_OK) {
+    avifDecoderDestroy(decoder);
+    return val::null();
+  }
+
+  val frames = Array.new_();
+
+  while (avifDecoderNextImage(decoder) == AVIF_RESULT_OK) {
+    avifRGBImage rgb;
+    avifRGBImageSetDefaults(&rgb, decoder->image);
+    rgb.depth = 8;
+    avifRGBImageAllocatePixels(&rgb);
+    avifImageYUVToRGB(decoder->image, &rgb);
+
+    val imageData = ImageData.new_(
+        Uint8ClampedArray.new_(typed_memory_view(rgb.rowBytes * rgb.height, rgb.pixels)),
+        rgb.width, rgb.height);
+
+    // Duration is in seconds, convert to milliseconds
+    int durationMs = (int)(decoder->imageTiming.duration * 1000.0);
+
+    val frameObj = Object.new_();
+    frameObj.set("imageData", imageData);
+    frameObj.set("duration", durationMs);
+    frames.call<void>("push", frameObj);
+
+    avifRGBImageFreePixels(&rgb);
+  }
+
+  avifDecoderDestroy(decoder);
+  return frames;
+}
+
 EMSCRIPTEN_BINDINGS(my_module) {
   function("decode", &decode);
+  function("decodeAnimated", &decodeAnimated);
+  function("isAnimated", &isAnimated);
 }

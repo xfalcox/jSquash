@@ -17,11 +17,13 @@
  * The avif options are defaulted to defaults from the meta.ts file.
  */
 import type { EncodeOptions, ImageData16bit } from './meta.js';
-import type { AVIFModule } from './codec/enc/avif_enc.js';
+import type { AVIFModule, AVIFAnimFrame } from './codec/enc/avif_enc.js';
 
 import { defaultOptions } from './meta.js';
 import { initEmscriptenModule } from './utils.js';
 import { threads } from 'wasm-feature-detect';
+
+export type { AVIFAnimFrame };
 
 let emscriptenModule: Promise<AVIFModule>;
 
@@ -134,6 +136,37 @@ export default async function encode(
     data.height,
     _options,
   );
+
+  if (!output) {
+    throw new Error('Encoding error.');
+  }
+
+  return output.buffer;
+}
+
+export async function encodeAnimated(
+  frames: AVIFAnimFrame[],
+  options: Partial<EncodeOptions> = {},
+): Promise<ArrayBuffer> {
+  if (!emscriptenModule) emscriptenModule = init();
+  const _options = { ...defaultOptions, ...options };
+
+  if (
+    _options.bitDepth !== 8 &&
+    _options.bitDepth !== 10 &&
+    _options.bitDepth !== 12
+  ) {
+    throw new Error('Invalid bit depth. Supported values are 8, 10, or 12.');
+  }
+
+  if (_options.lossless) {
+    _options.quality = 100;
+    _options.qualityAlpha = -1;
+    _options.subsample = 3;
+  }
+
+  const module = await emscriptenModule;
+  const output = module.encodeAnimated(frames, _options);
 
   if (!output) {
     throw new Error('Encoding error.');

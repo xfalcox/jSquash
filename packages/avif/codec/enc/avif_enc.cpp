@@ -168,6 +168,140 @@ val encode(std::string buffer, int width, int height, AvifOptions options) {
   return js_result;
 }
 
+val encodeAnimated(val frames, AvifOptions options) {
+  int frameCount = frames["length"].as<int>();
+  if (frameCount < 1) return val::null();
+
+  avifResult status;
+
+  int depth = options.bitDepth;
+  if (depth != 8 && depth != 10 && depth != 12) {
+    return val::null();
+  }
+
+  avifPixelFormat format;
+  switch (options.subsample) {
+    case 0:
+      format = AVIF_PIXEL_FORMAT_YUV400;
+      break;
+    case 1:
+      format = AVIF_PIXEL_FORMAT_YUV420;
+      break;
+    case 2:
+      format = AVIF_PIXEL_FORMAT_YUV422;
+      break;
+    case 3:
+      format = AVIF_PIXEL_FORMAT_YUV444;
+      break;
+    default:
+      format = AVIF_PIXEL_FORMAT_YUV420;
+      break;
+  }
+
+  bool lossless = options.quality == AVIF_QUALITY_LOSSLESS &&
+                  (options.qualityAlpha == -1 || options.qualityAlpha == AVIF_QUALITY_LOSSLESS) &&
+                  format == AVIF_PIXEL_FORMAT_YUV444;
+
+  // Create encoder
+  AvifEncoderPtr encoder(avifEncoderCreate(), avifEncoderDestroy);
+  RETURN_NULL_IF(encoder == nullptr);
+
+  // Set timescale to 1000 so duration values are in milliseconds
+  encoder->timescale = 1000;
+  encoder->maxThreads = emscripten_num_logical_cores();
+  encoder->tileRowsLog2 = options.tileRowsLog2;
+  encoder->tileColsLog2 = options.tileColsLog2;
+  encoder->speed = options.speed;
+
+  if (lossless) {
+    encoder->quality = AVIF_QUALITY_LOSSLESS;
+    encoder->qualityAlpha = AVIF_QUALITY_LOSSLESS;
+  } else {
+    status = avifEncoderSetCodecSpecificOption(encoder.get(), "sharpness",
+                                               std::to_string(options.sharpness).c_str());
+    RETURN_NULL_IF(status != AVIF_RESULT_OK);
+
+    encoder->quality = options.quality;
+    if (options.qualityAlpha == -1) {
+      encoder->qualityAlpha = options.quality;
+    } else {
+      encoder->qualityAlpha = options.qualityAlpha;
+    }
+
+    if (options.tune == 2 || (options.tune == 0 && options.quality >= 50)) {
+      status = avifEncoderSetCodecSpecificOption(encoder.get(), "tune", "ssim");
+      RETURN_NULL_IF(status != AVIF_RESULT_OK);
+    }
+
+    if (options.chromaDeltaQ) {
+      status = avifEncoderSetCodecSpecificOption(encoder.get(), "color:enable-chroma-deltaq", "1");
+      RETURN_NULL_IF(status != AVIF_RESULT_OK);
+    }
+
+    status = avifEncoderSetCodecSpecificOption(encoder.get(), "color:denoise-noise-level",
+                                               std::to_string(options.denoiseLevel).c_str());
+    RETURN_NULL_IF(status != AVIF_RESULT_OK);
+  }
+
+  for (int i = 0; i < frameCount; i++) {
+    val frame = frames[i];
+    val imageData = frame["imageData"];
+    int duration = frame["duration"].as<int>();
+    int width = imageData["width"].as<int>();
+    int height = imageData["height"].as<int>();
+
+    // Get pixel data
+    std::string pixels = imageData["data"]["buffer"].as<std::string>();
+
+    AvifImagePtr image(avifImageCreate(width, height, depth, format), avifImageDestroy);
+    RETURN_NULL_IF(image == nullptr);
+
+    if (lossless) {
+      image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_IDENTITY;
+    } else {
+      image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT601;
+    }
+
+    // Set frame duration in timescale units (milliseconds since timescale=1000)
+    image->duration = duration;
+
+    avifRGBImage srcRGB;
+    avifRGBImageSetDefaults(&srcRGB, image.get());
+
+    uint8_t* rgba = reinterpret_cast<uint8_t*>(const_cast<char*>(pixels.data()));
+    srcRGB.pixels = rgba;
+
+    if (depth > 8) {
+      srcRGB.depth = depth;
+      srcRGB.rowBytes = width * 8;
+    } else {
+      srcRGB.depth = 8;
+      srcRGB.rowBytes = width * 4;
+    }
+
+    if (options.enableSharpYUV) {
+      srcRGB.chromaDownsampling = AVIF_CHROMA_DOWNSAMPLING_SHARP_YUV;
+    }
+
+    status = avifImageRGBToYUV(image.get(), &srcRGB);
+    RETURN_NULL_IF(status != AVIF_RESULT_OK);
+
+    avifAddImageFlags addFlags = AVIF_ADD_IMAGE_FLAG_NONE;
+    status = avifEncoderAddImage(encoder.get(), image.get(), duration, addFlags);
+    RETURN_NULL_IF(status != AVIF_RESULT_OK);
+  }
+
+  avifRWData output = AVIF_DATA_EMPTY;
+  status = avifEncoderFinish(encoder.get(), &output);
+  auto js_result = val::null();
+  if (status == AVIF_RESULT_OK) {
+    js_result = Uint8Array.new_(typed_memory_view(output.size, output.data));
+  }
+
+  avifRWDataFree(&output);
+  return js_result;
+}
+
 EMSCRIPTEN_BINDINGS(my_module) {
   value_object<AvifOptions>("AvifOptions")
       .field("quality", &AvifOptions::quality)
@@ -184,4 +318,5 @@ EMSCRIPTEN_BINDINGS(my_module) {
       .field("bitDepth", &AvifOptions::bitDepth);
 
   function("encode", &encode);
+  function("encodeAnimated", &encodeAnimated);
 }
