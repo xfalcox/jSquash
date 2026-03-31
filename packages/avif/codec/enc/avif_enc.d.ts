@@ -19,11 +19,20 @@ export interface EncodeOptions {
   bitDepth: number;
 }
 
+export type AVIFAnimFrame = {
+  imageData: ImageData;
+  duration: number;
+};
+
 export interface AVIFModule extends EmscriptenWasm.Module {
   encode(
     data: BufferSource,
     width: number,
     height: number,
+    options: EncodeOptions,
+  ): Uint8Array | null;
+  encodeAnimated(
+    frames: AVIFAnimFrame[],
     options: EncodeOptions,
   ): Uint8Array | null;
 }

@@ -16,11 +16,13 @@
  * and modified it to decode JPEG images.
  */
 
-import type { AVIFModule } from './codec/dec/avif_dec.js';
+import type { AVIFModule, AVIFAnimFrame } from './codec/dec/avif_dec.js';
 import { initEmscriptenModule } from './utils.js';
 
 import avif_dec from './codec/dec/avif_dec.js';
 import { ImageData16bit } from 'meta.js';
+
+export type { AVIFAnimFrame };
 
 let emscriptenModule: Promise<AVIFModule>;
 
@@ -76,4 +78,28 @@ export default async function decode(
   const result = module.decode(buffer, bitDepth);
   if (!result) throw new Error('Decoding error');
   return result;
+}
+
+export async function decodeAnimated(
+  buffer: ArrayBuffer,
+): Promise<AVIFAnimFrame[]> {
+  if (!emscriptenModule) {
+    init();
+  }
+
+  const module = await emscriptenModule;
+  const result = module.decodeAnimated(buffer);
+  if (!result) throw new Error('Decoding error');
+  return result;
+}
+
+export async function isAnimated(
+  buffer: ArrayBuffer,
+): Promise<boolean> {
+  if (!emscriptenModule) {
+    init();
+  }
+
+  const module = await emscriptenModule;
+  return module.isAnimated(buffer);
 }
