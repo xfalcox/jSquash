@@ -262,9 +262,6 @@ val encodeAnimated(val frames, AvifOptions options) {
       image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT601;
     }
 
-    // Set frame duration in timescale units (milliseconds since timescale=1000)
-    image->duration = duration;
-
     avifRGBImage srcRGB;
     avifRGBImageSetDefaults(&srcRGB, image.get());
 
