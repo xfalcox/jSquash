@@ -1,0 +1,7 @@
+{
+  "name": "jxl",
+  "scripts": {
+    "build": "../../../tools/build-cpp.sh"
+  },
+  "type": "module"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "squoosh-gif",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "squoosh_gif_bg.wasm",
+    "squoosh_gif.js",
+    "squoosh_gif.d.ts"
+  ],
+  "main": "squoosh_gif.js",
+  "types": "squoosh_gif.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
