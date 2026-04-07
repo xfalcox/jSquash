@@ -1,0 +1,2 @@
+export { default as encode, encodeAnimated } from './encode.js';
+export { default as decode, decodeAnimated, isAnimated } from './decode.js';
